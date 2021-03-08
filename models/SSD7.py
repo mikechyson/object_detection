@@ -7,10 +7,12 @@
  
 @function:
 """
+from __future__ import division
 import numpy as np
 from keras import backend as K
 from keras.layers import Input, Lambda, Conv2D, MaxPooling2D, BatchNormalization, ELU, Reshape, Concatenate, Activation
 from keras.models import Model
+
 from keras.regularizers import l2
 
 from layers.AnchorBoxes import AnchorBoxes
@@ -185,13 +187,13 @@ def SSD7(image_size,
 
     if subtract_mean is not None:
         x1 = Lambda(input_mean_normalization, output_shape=(img_height, img_width, img_channels),
-                    name='input_mean_normalization')
+                    name='input_mean_normalization')(x1)
     if divide_by_stddev is not None:
         x1 = Lambda(input_stddev_normalization, output_shape=(img_height, img_width, img_channels),
-                    name='input_stddev_normalization')
+                    name='input_stddev_normalization')(x1)
     if swap_channels:
         x1 = Lambda(input_channel_swap, output_shape=(img_height, img_width, img_channels),
-                    name='input_channel_swap')
+                    name='input_channel_swap')(x1)
 
     # Layer 1
     conv1 = Conv2D(filters=32,
@@ -320,24 +322,28 @@ def SSD7(image_size,
     boxes4 = Conv2D(filters=n_boxes[0] * 4,
                     kernel_size=(3, 3),
                     strides=(1, 1),
+                    padding='same',
                     kernel_initializer='he_normal',
                     kernel_regularizer=l2(l2_reg),
                     name='boxes4')(conv4)
     boxes5 = Conv2D(filters=n_boxes[1] * 4,
                     kernel_size=(3, 3),
                     strides=(1, 1),
+                    padding='same',
                     kernel_initializer='he_normal',
                     kernel_regularizer=l2(l2_reg),
                     name='boxes5')(conv5)
     boxes6 = Conv2D(filters=n_boxes[2] * 4,
                     kernel_size=(3, 3),
                     strides=(1, 1),
+                    padding='same',
                     kernel_initializer='he_normal',
                     kernel_regularizer=l2(l2_reg),
                     name='boxes6')(conv6)
     boxes7 = Conv2D(filters=n_boxes[3] * 4,
                     kernel_size=(3, 3),
                     strides=(1, 1),
+                    padding='same',
                     kernel_initializer='he_normal',
                     kernel_regularizer=l2(l2_reg),
                     name='boxes7')(conv7)
@@ -397,6 +403,13 @@ def SSD7(image_size,
                            normalize_coords=normalize_coords,
                            name='anchors7')(boxes7)
 
+    conv_class_box_anchor = [
+        (classes4, boxes4, anchors4),
+        (classes5, boxes5, anchors5),
+        (classes6, boxes6, anchors6),
+        (classes7, boxes7, anchors7),
+    ]
+
     # Reshape the class predictions, yielding 3D tensors of shape
     # (batch, height * width * n_boxes, n_classes)
     # We want the class isolated in the last axis to perform softmax on them
@@ -448,6 +461,8 @@ def SSD7(image_size,
     predictions = Concatenate(axis=2, name='predictions')([classes_softmax,
                                                            boxes_concat,
                                                            anchors_concat])
+
+    print(predictions.shape)
 
     if mode == 'training':
         model = Model(inputs=x, outputs=predictions)

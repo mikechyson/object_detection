@@ -7,6 +7,8 @@
  
 @function:
 """
+from __future__ import division
+
 import numpy as np
 import keras.backend as K
 from keras.engine.topology import InputSpec
@@ -75,7 +77,7 @@ class AnchorBoxes(Layer):  # todo keras.engine.topology.Layer
             raise ValueError(f'All variances must be > 0, but the variances given are {variances}')
 
         self.img_height = img_height
-        self.img_width = img_width,
+        self.img_width = img_width
         self.this_scale = this_scale
         self.next_scale = next_scale
         self.aspect_ratios = aspect_ratios
@@ -92,7 +94,7 @@ class AnchorBoxes(Layer):  # todo keras.engine.topology.Layer
             self.n_boxes = len(aspect_ratios) + 1
         else:
             self.n_boxes = len(aspect_ratios)
-        super(AnchorBoxes, self).__init__(**kwargs)  # todo
+        super(AnchorBoxes, self).__init__(**kwargs)
 
     def build(self, input_shape):
         self.input_spec = [InputSpec(shape=input_shape)]
@@ -125,12 +127,13 @@ class AnchorBoxes(Layer):  # todo keras.engine.topology.Layer
                     box_height = box_width = np.sqrt(self.this_scale * self.next_scale) * size
                     wh_list.append((box_width, box_height))
             else:
-                box_height = self.img_height * size / np.sqrt(ar)  # todo ?
-                box_width = self.this_scale * size * np.sqrt(ar)  # todo ?
+                box_height = self.this_scale * size * np.sqrt(ar)  #
+                box_width = self.this_scale * size * np.sqrt(ar)  #
+                wh_list.append((box_width, box_height))
         wh_list = np.array(wh_list)
 
         # Get the shape of the input tensor
-        if K.image_data_format == 'tf':
+        if K.image_data_format() == 'channels_last':  # notice this, different version, different condition
             batch_size, feature_map_height, feature_map_width, feature_map_channels = x._keras_shape
         else:
             batch_size, feature_map_channels, feature_map_height, feature_map_width = x._keras_shape
@@ -166,20 +169,20 @@ class AnchorBoxes(Layer):  # todo keras.engine.topology.Layer
         # compute the grid of anchor box center points.
         cy = np.linspace(offset_height * step_height,
                          (offset_height + feature_map_height - 1) * step_height,
-                         feature_map_height)  # todo ?
+                         feature_map_height)
         cx = np.linspace(offset_width * step_width,
                          (offset_width + feature_map_width - 1) * step_width,
                          feature_map_width)
         cx_grid, cy_grid = np.meshgrid(cx, cy)
         # This is necessary for np.tile() to do what we want future down
-        cx_grid = np.expand_dims(cx_grid, -1)  # todo ?
+        cx_grid = np.expand_dims(cx_grid, -1)
         cy_grid = np.expand_dims(cy_grid, -1)
 
         # Create a 4D tensor template of the shape
         # (feature_map_height, feature_map_width, n_boxes, 4)
         # where the last dimension will contain (cx, cy, w, h)
-        boxes_tensor = np.zeros(feature_map_height, feature_map_width, self.n_boxes, 4)
-        boxes_tensor[:, :, :, 0] = np.tile(cx_grid, (1, 1, self.n_boxes))  # Set cx # todo tile
+        boxes_tensor = np.zeros((feature_map_height, feature_map_width, self.n_boxes, 4))
+        boxes_tensor[:, :, :, 0] = np.tile(cx_grid, (1, 1, self.n_boxes))  # Set cx
         boxes_tensor[:, :, :, 1] = np.tile(cy_grid, (1, 1, self.n_boxes))  # Set cy
         boxes_tensor[:, :, :, 2] = wh_list[:, 0]  # Set w
         boxes_tensor[:, :, :, 3] = wh_list[:, 1]  # Set h
@@ -223,5 +226,27 @@ class AnchorBoxes(Layer):  # todo keras.engine.topology.Layer
         # The result will be a 5D tensor of shape (batch_size, feature_map_height, feature_map_width, n_boxes, 8).
         boxes_tensor = np.expand_dims(boxes_tensor, axis=0)
         boxes_tensor = K.tile(K.constant(boxes_tensor, dtype='float32'), (K.shape(x)[0], 1, 1, 1, 1))
-
         return boxes_tensor
+
+    def compute_output_shape(self, input_shape):
+        if K.image_data_format() == 'channels_last':  # This point leads to a numpy array shape error
+            batch_size, feature_map_height, feature_map_width, feature_map_channels = input_shape
+        else:
+            batch_size, feature_map_channels, feature_map_height, feature_map_width = input_shape
+        return batch_size, feature_map_height, feature_map_width, self.n_boxes, 8
+
+    def get_config(self):
+        config = {
+            'img_height': self.img_height,
+            'img_width': self.img_width,
+            'this_scale': self.this_scale,
+            'next_scale': self.next_scale,
+            'aspect_ratios': list(self.aspect_ratios),
+            'two_boxes_for_ar1': self.two_boxes_for_ar1,
+            'clip_boxes': self.clip_boxes,
+            'variances': list(self.variances),
+            'coords': self.coords,
+            'normalize_coords': self.normalize_coords
+        }
+        base_config = super(AnchorBoxes, self).get_config()
+        return dict(list(base_config.items()) + list(config.items()))
