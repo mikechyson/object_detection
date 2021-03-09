@@ -2,7 +2,6 @@
 """
 @project: object_detection
 @file: SSD7
-@author: mike
 @time: 2021/3/3
  
 @function:

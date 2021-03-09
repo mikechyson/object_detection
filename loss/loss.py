@@ -2,7 +2,6 @@
 """
 @project: object_detection
 @file: loss
-@author: mike
 @time: 2021/3/8
  
 @function:

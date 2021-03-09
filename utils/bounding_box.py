@@ -2,7 +2,6 @@
 """
 @project: object_detection
 @file: bounding_box
-@author: mike
 @time: 2021/3/4
  
 @function:

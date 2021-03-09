@@ -2,7 +2,6 @@
 """
 @project: object_detection
 @file: AnchorBoxes
-@author: mike
 @time: 2021/3/4
  
 @function:
