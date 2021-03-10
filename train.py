@@ -64,28 +64,28 @@ val_dataset = DataGenerator(load_images_into_memory=False, hdf5_dataset_path=Non
 
 # Parse the image and label lists for the training and validation datasets.
 # Images
-images_dir = ''
+images_dir = '/Users/mike/Downloads/object-detection-crowdai'
 # Ground Truth
-train_labels_filename = ''
-val_labels_filename = ''
+train_labels_filename = '/Users/mike/Downloads/object-detection-crowdai/labels_train.csv'
+val_labels_filename = '/Users/mike/Downloads/object-detection-crowdai/labels_val.csv'
 
 train_dataset.parse_csv(images_dir=images_dir,
                         labels_filename=train_labels_filename,
-                        input_format=['image_name', 'xmin', 'xmax', 'ymin', 'ymax', 'class_id'],
+                        input_format=['xmin', 'ymin', 'xmax', 'ymax', 'image_name', 'class_id'],
                         include_classes='all')
 val_dataset.parse_csv(images_dir=images_dir,
                       labels_filename=val_labels_filename,
-                      input_format=['image_name', 'xmin', 'xmax', 'ymin', 'ymax', 'class_id'],
+                      input_format=['xmin', 'ymin', 'xmax', 'ymax', 'image_name', 'class_id'],
                       include_classes='all')
 
-train_dataset.create_hdf5_dataset()
-val_dataset.create_hdf5_dataset()
+# train_dataset.create_hdf5_dataset()
+# val_dataset.create_hdf5_dataset()
 
 # Get the number of samples in the training and validation datasets.
 trail_dataset_size = train_dataset.get_dataset_size()
 val_dataset_size = val_dataset.get_dataset_size()
-print(f'Number of images in the training dataset: \t{trail_dataset_size:>6}')
+print(f'Number of images in the training dataset  : \t{trail_dataset_size:>6}')
 print(f'Number of images in the validation dataset: \t{val_dataset_size:>6}')
 
 # 5) Define the image processing chain.
-data_augmentation_chain = DataAugmentationConstantInputSize()  # todo
+# data_augmentation_chain = DataAugmentationConstantInputSize()  # todo

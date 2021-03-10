@@ -58,3 +58,7 @@ def convert_coordinates(tensor, start_index, conversion, border_pixels='half'):
                          '"corners2centroids", "centroids2corners", "minmax2corners", '
                          '"corners2minmax".')
     return tensor_copy
+
+
+def iou(boxes1, boxes2, coords='centroids', mode='outer_product', border_pixels='half'):
+    pass
