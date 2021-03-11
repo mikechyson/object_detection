@@ -203,7 +203,7 @@ def SSD7(image_size,
                    kernel_regularizer=l2(l2_reg),
                    name='conv1')(x1)
     # Tensorflow uses filter format [filter_height, filter_width, in_channels, out_channels], hence axis = 3
-    conv1 = BatchNormalization(axis=3, momentum=0.99, name='bn1')(conv1)  # todo axis
+    conv1 = BatchNormalization(axis=3, momentum=0.99, name='bn1')(conv1)
     conv1 = ELU(name='elu1')(conv1)
     conv1 = MaxPooling2D(pool_size=(2, 2), name='pool1')(conv1)
 
@@ -472,7 +472,6 @@ def SSD7(image_size,
                          f'but received {mode}')
 
     if return_predictor_sizes:
-        # todo classes4._keras_shape[1:3]
         predictor_sizes = np.array([classes4._keras_shape[1:3],
                                     classes5._keras_shape[1:3],
                                     classes6._keras_shape[1:3],

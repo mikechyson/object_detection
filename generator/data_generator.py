@@ -18,7 +18,7 @@ import cv2
 import warnings
 from encoder_decoder.input_encoder import SSDInputEncoder
 import sklearn.utils
-from utils.boxes_validation_utils import BoxFilter
+from utils.boxes_validation import BoxFilter
 from copy import deepcopy
 import inspect
 
@@ -662,9 +662,9 @@ class DataGenerator:
                 objects_to_shuffle.append(self.image_ids)
             if self.eval_neutral is not None:
                 objects_to_shuffle.append(self.eval_neutral)
-            shuffle_objects = sklearn.utils.shuffle(*objects_to_shuffle)  # todo
+            shuffle_objects = sklearn.utils.shuffle(*objects_to_shuffle)
             for i in range(len(objects_to_shuffle)):
-                objects_to_shuffle[i][:] = shuffle_objects[i]  # todo ?
+                objects_to_shuffle[i][:] = shuffle_objects[i]
 
         #############################
         # Handing of degenerate boxes
@@ -673,7 +673,7 @@ class DataGenerator:
             box_filter = BoxFilter(check_overlap=False,
                                    check_min_area=False,
                                    check_degenerate=True,
-                                   labels_format=self.labels_format)  # todo implementation
+                                   labels_format=self.labels_format)
 
         # Override the labels formats of all the transformation to make sure they are set correctly.
         if self.labels is not None:

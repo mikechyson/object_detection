@@ -11,9 +11,11 @@ from models.SSD7 import SSD7
 from keras.optimizers import Adam
 from loss.loss import SSDLoss
 from generator.data_generator import DataGenerator
-from generator.data_augmentation_chain_constant_input_size import DataAugmentationConstantInputSize
+from augmentation.constant_input_size_chain import DataAugmentationConstantInputSize
+from encoder_decoder.input_encoder import SSDInputEncoder
 
-# 1) Set the configs
+########################################################################################################################
+# Set the configs
 img_height = 300
 img_width = 480
 img_channels = 3
@@ -34,7 +36,8 @@ variances = [1.0, 1.0, 1.0, 1.0]  # The list of variances by which the encoded t
 normalize_coords = True  # Whether or not the model is supposed to use coordinates relative to the image size
 batch_size = 16
 
-# 2) Create the model
+########################################################################################################################
+# Create the model
 K.clear_session()  # Clear previous models from memory.
 model = SSD7(image_size=(img_height, img_width, img_channels),
              n_classes=n_classes,
@@ -53,29 +56,31 @@ model = SSD7(image_size=(img_height, img_width, img_channels),
              divide_by_stddev=intensity_range)
 print(model.summary())
 
-# 3) Compile the model
+########################################################################################################################
+# Compile the model
 adam = Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0.0)
 ssd_loss = SSDLoss(neg_pos_ratio=3, alpha=1.0)
 model.compile(optimizer=adam, loss=ssd_loss.compute_loss)
 
-# 4) Set up the data generators for the training
+########################################################################################################################
+# Set up the data generators for the training
 train_dataset = DataGenerator(load_images_into_memory=False, hdf5_dataset_path=None)
 val_dataset = DataGenerator(load_images_into_memory=False, hdf5_dataset_path=None)
 
 # Parse the image and label lists for the training and validation datasets.
 # Images
-images_dir = '/Users/mike/Downloads/object-detection-crowdai'
+images_dir = '/Users/mike/Downloads/udacity_driving_datasets'
 # Ground Truth
-train_labels_filename = '/Users/mike/Downloads/object-detection-crowdai/labels_train.csv'
-val_labels_filename = '/Users/mike/Downloads/object-detection-crowdai/labels_val.csv'
+train_labels_filename = '/Users/mike/Downloads/udacity_driving_datasets/labels_train.csv'
+val_labels_filename = '/Users/mike/Downloads/udacity_driving_datasets/labels_val.csv'
 
 train_dataset.parse_csv(images_dir=images_dir,
                         labels_filename=train_labels_filename,
-                        input_format=['xmin', 'ymin', 'xmax', 'ymax', 'image_name', 'class_id'],
+                        input_format=['image_name', 'xmin', 'xmax', 'ymin', 'ymax', 'class_id'],
                         include_classes='all')
 val_dataset.parse_csv(images_dir=images_dir,
                       labels_filename=val_labels_filename,
-                      input_format=['xmin', 'ymin', 'xmax', 'ymax', 'image_name', 'class_id'],
+                      input_format=['image_name', 'xmin', 'xmax', 'ymin', 'ymax', 'class_id'],
                       include_classes='all')
 
 # train_dataset.create_hdf5_dataset()
@@ -87,5 +92,32 @@ val_dataset_size = val_dataset.get_dataset_size()
 print(f'Number of images in the training dataset  : \t{trail_dataset_size:>6}')
 print(f'Number of images in the validation dataset: \t{val_dataset_size:>6}')
 
-# 5) Define the image processing chain.
-# data_augmentation_chain = DataAugmentationConstantInputSize()  # todo
+########################################################################################################################
+# 5) Define the image processing and augmentation chain.
+# data_augmentation_chain = DataAugmentationConstantInputSize(random_brightness=(-48, 48, 0.5),
+#                                                             random_contrast=(0.5, 1.8, 0.5),
+#                                                             random_saturation=(0.5, 1.8, 0.5),
+#                                                             random_hue=(18, 0.5),
+#                                                             random_flip=0.5,
+#                                                             random_translate=((0.03, 0.5), (0.03, 0.5), 0.5),
+#                                                             random_scale=(0.5, 2.0, 0.5),
+#                                                             n_trials_max=3,
+#                                                             clip_boxes=True,
+#                                                             overlap_criterion='area',
+#                                                             bounds_box_filter=(0.3, 1.0),
+#                                                             bounds_validator=(0.5, 1.0),
+#                                                             n_boxes_min=1,
+#                                                             background=(0, 0, 0))  # todo
+
+########################################################################################################################
+# Instantiate an encoder that can encode ground truth labels into the format needed by the SSD loss function.
+# The encoder constructor needs the spatial dimensions of the model predictor layers to create the anchor boxes.
+predictor_sizes = [
+    model.get_layer('classes4').output_shape[1:3],
+    model.get_layer('classes5').output_shape[1:3],
+    model.get_layer('classes6').output_shape[1:3],
+    model.get_layer('classes7').output_shape[1:3]
+]
+print(predictor_sizes)
+
+ssd_input_encoder = SSDInputEncoder()

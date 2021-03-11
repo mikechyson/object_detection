@@ -15,7 +15,7 @@ from keras.engine.topology import Layer
 from utils.bounding_box import convert_coordinates
 
 
-class AnchorBoxes(Layer):  # todo keras.engine.topology.Layer
+class AnchorBoxes(Layer):
     """
     A Keras layer to create an output tensor containing anchor box coordinates
     and variances based on the input tensor and the passed arguments.
@@ -42,8 +42,6 @@ class AnchorBoxes(Layer):  # todo keras.engine.topology.Layer
         5D tensor of shape (batch, height, width, n_boxes, 8). The last axis contains
         the four anchor box coordinates and the four variance values for each box.
     """
-
-    # todo offsets to the anchor box vs absolute box coordinate
 
     def __init__(self,
                  img_height,
@@ -205,7 +203,6 @@ class AnchorBoxes(Layer):  # todo keras.engine.topology.Layer
             boxes_tensor[:, :, :, [0, 2]] /= self.img_width
             boxes_tensor[:, :, :, [1, 3]] /= self.img_height
 
-        # todo limit directly
         if self.coords == 'centroids':
             # Convert (xmin, ymin, xmax, ymax) back to (cx, cy, w, h)
             boxes_tensor = convert_coordinates(boxes_tensor, start_index=0, conversion='corners2centroids')
