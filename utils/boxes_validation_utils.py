@@ -12,7 +12,58 @@ from utils.bounding_box import iou
 
 
 class BoundGenerator:
-    pass
+    """
+    Generates pairs of floating point values that represent lower and upper bounds from a given sample space.
+    """
+
+    def __init__(self,
+                 sample_space=((0.1, None),
+                               (0.3, None),
+                               (0.5, None),
+                               (0.7, None),
+                               (0.9, None),
+                               (None, None)),
+                 weights=None):
+        """
+        Arguments:
+            sample_space (list or tuple): A list, tuple, or array-like object of shape
+                `(n, 2)` that contains `n` samples to choose from, where each sample is
+                a 2-tuple of scalars and/or `None` values.
+            weights: A list or tuple representing the distribution over the sample space.
+                If `None`, a uniform distribution will be assumed.
+        """
+        # Value check.
+        if weights is not None and len(weights) != len(sample_space):
+            raise ValueError("`weights` must either be `None` for uniform distribution or"
+                             "have the same length as `sample_space`.")
+
+        self.sample_space = []
+        for bound_pair in sample_space:
+            if len(bound_pair) != 2:
+                raise ValueError("All elements of the sample space must be a 2-tuples.")
+            bound_pair = list(bound_pair)
+            if bound_pair[0] is None:
+                bound_pair[0] = 0.0
+            if bound_pair[1] is None:
+                bound_pair[1] = 1.0
+            if bound_pair[0] > bound_pair[1]:
+                raise ValueError("For all sample space elements, the lower bound cannot be "
+                                 "greater than the upper bound.")
+            self.sample_space.append(bound_pair)
+        self.sample_space_size = len(self.sample_space)
+
+        if weights is None:
+            self.weights = [1.0 / self.sample_space_size] * self.sample_space_size
+        else:
+            self.weights = weights
+
+    def __call__(self):
+        """
+        Returns:
+            An item of the sample space, i.e. a 2-tuple of scalars.
+        """
+        i = np.random.choice(self.sample_space_size, p=self.weights)
+        return self.sample_space[i]
 
 
 class BoxFilter:
@@ -116,7 +167,7 @@ class BoxFilter:
         if self.check_overlap:
             # Get the lower and upper bounds.
             if isinstance(self.overlap_bounds, BoundGenerator):
-                lower, upper = self.overlap_bounds()  # todo implementation
+                lower, upper = self.overlap_bounds()  # Call BoundGenerator's __call__ method.
             else:
                 lower, upper = self.overlap_bounds
 
