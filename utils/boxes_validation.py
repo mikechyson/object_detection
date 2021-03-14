@@ -178,7 +178,7 @@ class BoxFilter:
                 # Compute the IoU between the patch and all of the ground truth boxes.
                 image_boxes_iou = iou(image_coords, labels[:, [xmin, ymin, xmax, ymax]],
                                       coords='corners',
-                                      mode='element-wise',
+                                      mode='element_wise',
                                       border_pixels=self.border_pixels)
                 requirements_met *= (image_boxes_iou > lower) * (image_boxes_iou <= upper)
             elif self.overlap_criterion == 'area':

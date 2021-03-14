@@ -20,7 +20,7 @@ from layers.AnchorBoxes import AnchorBoxes
 def SSD7(image_size,
          n_classes,
          mode='training',
-         l2_reg=0.0,
+         l2_regularization=0.0,
          min_scale=0.1,
          max_scale=0.9,
          scales=None,
@@ -52,37 +52,13 @@ def SSD7(image_size,
     layers that take their input from layers 4, 5, 6, and 7, respectively.
 
 
-    :param image_size:
-    :param n_classes:
-    :param mode:
-    :param l2_reg:
-    :param min_scale:
-    :param max_scale:
-    :param scales:
-    :param aspect_ratios_global:
-    :param aspect_ratios_per_layer:
-    :param two_boxes_for_ar1:
-    :param steps:
-    :param offsets:
-    :param clip_boxes:
-    :param variances:
-    :param coords:
-    :param normalize_coords:
-    :param subtract_mean:
-    :param divide_by_stddev:
-    :param swap_channels:
-    :param confidence_thresh:
-    :param iou_threshold:
-    :param top_k:
-    :param nms_max_output_size:
-    :param return_predictor_sizes:
-    :return: Keras SSD model.
-    :return: predictor_sizes (optional): A Numpy array containing the `(height, width)` portion
-                of the output tensor shape for each convolutional predictor layer. During
-                training, the generator function needs this in order to transform
-                the ground truth labels into tensors of identical structure as the
-                output tensors of the model, which is in turn needed for the cost
-                function.
+    Returns:
+        predictor_sizes (optional): A Numpy array containing the `(height, width)` portion
+        of the output tensor shape for each convolutional predictor layer. During
+        training, the generator function needs this in order to transform
+        the ground truth labels into tensors of identical structure as the
+        output tensors of the model, which is in turn needed for the cost
+        function.
     """
     n_predictor_layers = 4  # The number of predictor conv layers
     n_classes += 1  # Account for the background class
@@ -200,7 +176,7 @@ def SSD7(image_size,
                    strides=(1, 1),
                    padding='same',
                    kernel_initializer='he_normal',
-                   kernel_regularizer=l2(l2_reg),
+                   kernel_regularizer=l2(l2_regularization),
                    name='conv1')(x1)
     # Tensorflow uses filter format [filter_height, filter_width, in_channels, out_channels], hence axis = 3
     conv1 = BatchNormalization(axis=3, momentum=0.99, name='bn1')(conv1)
@@ -213,7 +189,7 @@ def SSD7(image_size,
                    strides=(1, 1),
                    padding='same',
                    kernel_initializer='he_normal',
-                   kernel_regularizer=l2(l2_reg),
+                   kernel_regularizer=l2(l2_regularization),
                    name='conv2')(conv1)
     conv2 = BatchNormalization(axis=3, momentum=0.99, name='bn2')(conv2)
     conv2 = ELU(name='elu2')(conv2)
@@ -225,7 +201,7 @@ def SSD7(image_size,
                    strides=(1, 1),
                    padding='same',
                    kernel_initializer='he_normal',
-                   kernel_regularizer=l2(l2_reg),
+                   kernel_regularizer=l2(l2_regularization),
                    name='conv3')(conv2)
     conv3 = BatchNormalization(axis=3, momentum=0.99, name='bn3')(conv3)
     conv3 = ELU(name='elu3')(conv3)
@@ -237,7 +213,7 @@ def SSD7(image_size,
                    strides=(1, 1),
                    padding='same',
                    kernel_initializer='he_normal',
-                   kernel_regularizer=l2(l2_reg),
+                   kernel_regularizer=l2(l2_regularization),
                    name='conv4')(conv3)
     conv4 = BatchNormalization(axis=3, momentum=0.99, name='bn4')(conv4)
     conv4 = ELU(name='elu4')(conv4)
@@ -249,7 +225,7 @@ def SSD7(image_size,
                    strides=(1, 1),
                    padding='same',
                    kernel_initializer='he_normal',
-                   kernel_regularizer=l2(l2_reg),
+                   kernel_regularizer=l2(l2_regularization),
                    name='conv5')(conv4)
     conv5 = BatchNormalization(axis=3, momentum=0.99, name='bn5')(conv5)
     conv5 = ELU(name='elu5')(conv5)
@@ -261,7 +237,7 @@ def SSD7(image_size,
                    strides=(1, 1),
                    padding='same',
                    kernel_initializer='he_normal',
-                   kernel_regularizer=l2(l2_reg),
+                   kernel_regularizer=l2(l2_regularization),
                    name='conv6')(conv5)
     conv6 = BatchNormalization(axis=3, momentum=0.99, name='bn6')(conv6)
     conv6 = ELU(name='elu6')(conv6)
@@ -273,7 +249,7 @@ def SSD7(image_size,
                    strides=(1, 1),
                    padding='same',
                    kernel_initializer='he_normal',
-                   kernel_regularizer=l2(l2_reg),
+                   kernel_regularizer=l2(l2_regularization),
                    name='conv7')(conv6)
     conv7 = BatchNormalization(axis=3, momentum=0.99, name='bn7')(conv7)
     conv7 = ELU(name='elu7')(conv7)
@@ -293,28 +269,28 @@ def SSD7(image_size,
                       strides=(1, 1),
                       padding='same',
                       kernel_initializer='he_normal',
-                      kernel_regularizer=l2(l2_reg),
+                      kernel_regularizer=l2(l2_regularization),
                       name='classes4')(conv4)
     classes5 = Conv2D(filters=n_boxes[1] * n_classes,
                       kernel_size=(3, 3),
                       strides=(1, 1),
                       padding='same',
                       kernel_initializer='he_normal',
-                      kernel_regularizer=l2(l2_reg),
+                      kernel_regularizer=l2(l2_regularization),
                       name='classes5')(conv5)
     classes6 = Conv2D(filters=n_boxes[2] * n_classes,
                       kernel_size=(3, 3),
                       strides=(1, 1),
                       padding='same',
                       kernel_initializer='he_normal',
-                      kernel_regularizer=l2(l2_reg),
+                      kernel_regularizer=l2(l2_regularization),
                       name='classes6')(conv6)
     classes7 = Conv2D(filters=n_boxes[3] * n_classes,
                       kernel_size=(3, 3),
                       strides=(1, 1),
                       padding='same',
                       kernel_initializer='he_normal',
-                      kernel_regularizer=l2(l2_reg),
+                      kernel_regularizer=l2(l2_regularization),
                       name='classes7')(conv7)
 
     # Output shape of boxes predictor: (batch, height, width, n_boxes * 4)
@@ -323,28 +299,28 @@ def SSD7(image_size,
                     strides=(1, 1),
                     padding='same',
                     kernel_initializer='he_normal',
-                    kernel_regularizer=l2(l2_reg),
+                    kernel_regularizer=l2(l2_regularization),
                     name='boxes4')(conv4)
     boxes5 = Conv2D(filters=n_boxes[1] * 4,
                     kernel_size=(3, 3),
                     strides=(1, 1),
                     padding='same',
                     kernel_initializer='he_normal',
-                    kernel_regularizer=l2(l2_reg),
+                    kernel_regularizer=l2(l2_regularization),
                     name='boxes5')(conv5)
     boxes6 = Conv2D(filters=n_boxes[2] * 4,
                     kernel_size=(3, 3),
                     strides=(1, 1),
                     padding='same',
                     kernel_initializer='he_normal',
-                    kernel_regularizer=l2(l2_reg),
+                    kernel_regularizer=l2(l2_regularization),
                     name='boxes6')(conv6)
     boxes7 = Conv2D(filters=n_boxes[3] * 4,
                     kernel_size=(3, 3),
                     strides=(1, 1),
                     padding='same',
                     kernel_initializer='he_normal',
-                    kernel_regularizer=l2(l2_reg),
+                    kernel_regularizer=l2(l2_regularization),
                     name='boxes7')(conv7)
 
     # Generate the anchor boxes

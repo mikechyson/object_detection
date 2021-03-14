@@ -7,7 +7,12 @@
  
 @function:
 """
+from __future__ import division
 import numpy as np
+from utils.bounding_box import convert_coordinates
+from utils.matching import match_bipartite_greedy
+from utils.matching import match_multi
+from utils.bounding_box import iou
 
 
 class SSDInputEncoder:
@@ -208,9 +213,9 @@ class SSDInputEncoder:
         # If `aspect_ratios_per_layer` is None, then we use the same list of aspect ratios
         # `aspect_ratios_global` for all predictor layers.
         if aspect_ratios_per_layer is None:
-            self.aspect_ratios_per_layer = [aspect_ratios_global] * predictor_sizes.shape[0]
+            self.aspect_ratios = [aspect_ratios_global] * predictor_sizes.shape[0]
         else:
-            self.aspect_ratios_per_layer = aspect_ratios_per_layer
+            self.aspect_ratios = aspect_ratios_per_layer
         if steps is not None:
             self.steps = steps
         else:
@@ -256,9 +261,368 @@ class SSDInputEncoder:
 
         # Iterate over all predictor layers and compute the anchor boxes for each one.
         for i in range(len(self.predictor_sizes)):
-            boxes, center, wh, step, offset = self.generate_anchor_boxes_for_layer()  # todo implementation
+            boxes, center, wh, step, offset = self.generate_anchor_boxes_for_layer(
+                feature_map_size=self.predictor_sizes[i],
+                aspect_ratios=self.aspect_ratios[i],
+                this_scale=self.scales[i],
+                next_scale=self.scales[i + 1],
+                this_steps=self.steps[i],
+                this_offsets=self.offsets[i],
+                diagnostics=True)
             self.boxes_list.append(boxes)
             self.wh_list_diag.append(wh)
             self.steps_diag.append(step)
             self.offsets_diag.append(offset)
             self.centers_diag.append(center)
+
+    def __call__(self, ground_truth_labels, diagnostics=False):
+        """
+        Convert ground truth bounding box data into a format to train SSD model.
+
+        Arguments:
+            ground_truth_labels: A python list of length `batch_size` that contains one 2D Numpy array
+                for each batch image. Each such array has `k` rows for the `k` ground truth bounding boxes belonging
+                to the respective image, and the data for each ground truth bounding box has the format
+                `(class_id, xmin, ymin, xmax, ymax)` (i.e. the 'corners' coordinate format), and `class_id` must be
+                an integer greater than 0 for all boxes as class ID 0 is reserved for the background class.
+            diagnostics: If `True`, not only the encoded ground truth tensor will be returned,
+                but also a copy of it with anchor box coordinates in place of the ground truth coordinates.
+                This can be very useful if you want to visualize which anchor boxes got matched to which ground truth
+                boxes.
+        Returns:
+            `y_encoded`, a 3D NumPy array of the shape `(batch_size, #boxes, #classes + 4 + 4 + 4)` that serves as
+            the ground truth label tensor for training, where `#boxes` is the total number of boxes predicted by the
+            model per image, and the classes are one-hot-encoded. The four elements after the class vectors in the
+            last axis are the box coordinates, the next for elements after that are just dummy elements, and the last
+            four elements are the variances.
+        """
+        # Mapping to define which indices represent which coordinates in the ground truth.
+        class_id = 0
+        xmin = 1
+        ymin = 2
+        xmax = 3
+        ymax = 4
+
+        batch_size = len(ground_truth_labels)
+
+        # Generate the template for y_encdoed.
+        y_encoded = self.generate_encoding_template(batch_size=batch_size, diagnostics=False)
+
+        # Match ground truth boxes to anchor boxes.
+        # Every anchor box that does not have a ground truth match and for which the maximal IoU overlap
+        # with any ground truth box is less than or equal to `neg_iou_limit` will be a negative (background)
+        # box.
+        y_encoded[:, :, self.background_id] = 1  # All boxes are background boxes be default.
+        n_boxes = y_encoded.shape[1]  # The total number of boxes that the model predicts per batch item.
+        class_vectors = np.eye(self.n_classes)  # An identity matrix that we'll use an one-hot class vectors.
+
+        for i in range(batch_size):
+            # If there is no ground truth for this batch item, there is nothing to match.
+            if ground_truth_labels[i].size == 0:
+                continue
+            labels = ground_truth_labels[i].astype(np.float)
+            # Check for degenerate ground truth bounding boxes before attempting any computations.
+            if np.any(labels[:, [xmax]] - labels[:, [xmin]] <= 0) or np.any(labels[:, [ymax]] - labels[:, [ymin]] <= 0):
+                raise DegenerateBoxError("SSDInputEncoder detected degenerate ground truth bounding boxes for "
+                                         f"batch item {i} with bounding boxes {labels}, i.e. bounding boxes where "
+                                         f"xmax <= xmin and/or ymax <= ymin. Degenerate ground truth bounding boxes "
+                                         f"will lead to NaN errors during the training.")
+            # Maybe normalize the box coordinates.
+            if self.normalize_coords:
+                labels[:, [ymin, ymax]] /= self.img_height
+                labels[:, [xmin, xmax]] /= self.img_width
+
+            # Maybe convert the box coordinate format.
+            if self.coords == 'centroids':
+                labels = convert_coordinates(labels, start_index=xmin,
+                                             conversion='corners2centroids',
+                                             border_pixels=self.border_pixels)
+            elif self.coords == 'minmax':
+                labels = convert_coordinates(labels, start_index=xmin, conversion='corners2minmax')
+
+            classes_one_hot = class_vectors[labels[:, class_id].astype(np.int)]
+            # The one-hot version of the labels for this batch item.
+            labels_one_hot = np.concatenate([classes_one_hot, labels[:, [xmin, ymin, xmax, ymin]]], axis=-1)
+
+            # Compute the IoU similarity between all anchor boxes and all ground truth boxes for this batch item.
+            # This is a matrix of shape `(num_ground_truth_boxes, num_anchor_boxes)`.
+            similarities = iou(labels[:, [xmin, ymin, xmax, ymax]],
+                               y_encoded[i, :, -12:-8],
+                               coords=self.coords,
+                               mode='outer_product',
+                               border_pixels=self.border_pixels)
+
+            # First:
+            # Do bipartite matching, i.e. match each ground truth box to the one anchor box with the highest IoU.
+            # This ensures that each ground truth box will have at least one good match.
+            bipartite_matches = match_bipartite_greedy(weight_matrix=similarities)
+            # Write the ground truth data to the matched anchor boxes.
+            y_encoded[i, bipartite_matches, :-8] = labels_one_hot
+            # Set the columns of the matched anchor boxes to zero to indicate that they were matched.
+            similarities[:, bipartite_matches] = 0
+
+            # Second:
+            # Maybe do 'multi' matching, where each remaining anchor box will be matched to its most
+            # similar ground truth with an IoU of at least `pos_iou_threshold`, or not matched if there
+            # is no such ground truth box.
+            if self.matching_type == 'multi':
+                # Get all matches that specify the IoU threshold.
+                matches = match_multi(weight_matrix=similarities, threshold=self.pos_iou_threshold)
+                # Write the ground truth data to the matched anchor box.
+                y_encoded[i, matches, :-8] = labels_one_hot[matches[0]]
+                # Set the columns of the matched anchor boxes to zero to indicate that they were matched.
+                similarities[:, matches[1]] = 0
+
+            # Third:
+            # After the matching is done, all negative (background) anchor boxes that have an IoU of `neg_iou_limit`
+            # or more with any ground truth box will be set to neutral, i.e. they will no longer be background boxes.
+            # These anchors are "too close" to a ground truth box to be valid background boxes.
+            max_background_similarities = np.amax(similarities, axis=0)
+            neutral_boxes = np.nonzero(max_background_similarities >= self.neg_iou_limit)[0]
+            y_encoded[i, neutral_boxes, self.background_id] = 0
+
+        # Convert box coordinates to anchor box offsets.
+        # [-12, -9]: ground truth
+        # [-8, -5]: anchor
+        # [-4, -1]: variance
+        if self.coords == 'centroids':
+            # cx(gt) - cx(anchor), cy(gt) - cy(anchor)
+            y_encoded[:, :, [-12, -11]] -= y_encoded[:, :, [-8, -7]]
+            # (cx(gt) - cx(anchor)) / w(anchor) / cx_variance,
+            # (cy(gt) - cy(anchor)) / w(anchor) / cy_variance
+            y_encoded[:, :, [-12, -11]] /= y_encoded[:, :, [-6, -5]] * y_encoded[:, :, [-4, -3]]
+            # w(gt) / w(anchor), h(gt) / h(anchor)
+            y_encoded[:, :, [-10, -9]] /= y_encoded[:, :, [-6, -5]]
+            # ln(w(gt) / w(anchor)) / w_variance, ln(h(gt) / h(anchor)) / h_variance
+            y_encoded[:, :, [-10, -9]] = np.log(y_encoded[:, :, [-10, -9]]) / y_encoded[:, :, [-2, -1]]
+        elif self.coords == 'corners':
+            # gt - anchor for all four coordinates
+            y_encoded[:, :, -12:-8] -= y_encoded[:, :, -8:-4]
+            # (xmin(gt) - xmin(anchor)) / w(anchor), (xmax(gt) - xmax(anchor)) / w(anchor)
+            y_encoded[:, :, [-12, -10]] /= np.expand_dims(y_encoded[:, :, -6] - y_encoded[:, :, -8], axis=-1)
+            # (ymin(gt) - ymin(anchor)) / h(anchor), (ymax(gt) - ymax(anchor)) / h(anchor)
+            y_encoded[:, :, [-11, -9]] /= np.expand_dims(y_encoded[:, :, -5] - y_encoded[:, :, -7], axis=-1)
+            # (gt - anchor) / size(anchor) / variance for all for coordinates,
+            # where size refers to w and h respectively.
+            y_encoded[:, :, -12:-8] /= y_encoded[:, :, -4:]
+        elif self.coords == 'minmax':
+            # gt - anchor for all four coordinates
+            y_encoded[:, :, -12:-8] -= y_encoded[:, :, -8, -4]
+            # (xmin(gt) - xmin(anchor)) / w(anchor), (xmax(gt) - xmax(anchor)) / w(anchor)
+            y_encoded[:, :, [-12, -11]] /= np.expand_dims(y_encoded[:, :, -7] - y_encoded[:, :, -8], axis=-1)
+            # (ymin(gt) - ymin(anchor)) / h(anchor), (ymax(gt) - ymax(anchor)) / h(anchor)
+            y_encoded[:, :, [-10, -9]] /= np.expand_dims(y_encoded[:, :, -5] - y_encoded[:, :, -6], axis=-1)
+            # (gt - anchor) / size(anchor) / variance for all for coordinates,
+            # where size refers to w and h respectively.
+            y_encoded[:, :, -12:-8] /= y_encoded[:, :, -4:]
+
+        if diagnostics:
+            # We save the matched anchor boxes (i.e. anchor boxes that were matched  to a ground truth box,
+            # but keeping the anchor box coordinates).
+            y_matched_anchors = np.copy(y_encoded)
+            # Keeping the anchor box coordinates means setting the offsets to zero.
+            y_matched_anchors[:, :, -12:-8] = 0
+            return y_encoded, y_matched_anchors
+        else:
+            return y_encoded
+
+    def generate_anchor_boxes_for_layer(self,
+                                        feature_map_size,
+                                        aspect_ratios,
+                                        this_scale,
+                                        next_scale,
+                                        this_steps=None,
+                                        this_offsets=None,
+                                        diagnostics=False):
+        """
+        Compute an array of the spatial positions and sizes of the anchor boxes for one predictor layer
+        of size `feature_map_size == [feature_map_height, feature_map_width]`.
+
+        Arguments:
+            feature_map_size: A list or tuple `[feature_map_height, feature_map_width]` with the spatial
+                dimensions of the feature map for which to generate the anchor boxes.
+            aspect_ratios: A list of floats, the aspect ratios for which anchor boxes are to be generated.
+                All list element must be unique.
+            this_scale: A float in [0, 1], the scaling factor for the size of the generate anchor boxes
+                as a fraction of the shorter side the input image.
+            next_scale: A float in [0, 1], the next larger scaling factor. Only relevant if
+                `self.two_boxes_for_ar1 == True`.
+            diagnostics: If `True`, the following additional outputs will be returned:
+                1) A list of the center point `x` and `y` coordinates for each spatial location.
+                2) A list containing `(width, height)` for each box aspect ratio.
+                3) A tuple containing `(step_height, step_width)`.
+                4) A tuple containing `(offset_height, offset_width)`.
+                This information can be useful to understand in just a few numbers what generated grid of
+                anchor boxes actually looks like, i.e. how large the different boxes are and how dense their
+                spatial distribution is, in order to determine whether the box grid covers the input images
+                appropriately and whether the box sizes are appropriate to fit the sizes of the objects to
+                be detected.
+        Returns:
+            A 4D NumPy tensor of shape `(feature_map_height, feature_map_width, n_boxes_per_cell, 4)` where
+            the last dimension contain `(xmin, xmax, ymin, ymax)` for each anchor box in each cell of the
+            feature map.
+        """
+        # Compute box width and height for each aspect ratio.
+
+        # The shorter side of the image will be used to compute `w` and `h` using `scale` and `aspect_ratios`.
+        size = min(self.img_width, self.img_height)
+        # Compute the box widths and heights for all aspect ratios.
+        wh_list = []
+        for ar in aspect_ratios:
+            if ar == 1:
+                # Compute the regular anchor box for aspect ratio 1.
+                box_height = box_width = this_scale * size
+                wh_list.append((box_width, box_height))
+                if self.two_boxes_for_ar1:
+                    box_height = box_width = np.sqrt(this_scale * next_scale) * size
+                    wh_list.append((box_width, box_height))
+            else:
+                box_width = this_scale * size * np.sqrt(ar)
+                box_height = this_scale * size / np.sqrt(ar)
+                wh_list.append((box_width, box_height))
+        wh_list = np.array(wh_list)
+
+        n_boxes = len(wh_list)
+
+        # Compute the grid of box center points.
+        # They are identical for all aspect ratios.
+
+        # Compute the step sizes, i.e. how far apart the anchor box center points will be vertically and horizontally.
+        if this_steps is None:
+            step_height = self.img_height / feature_map_size[0]
+            step_width = self.img_width / feature_map_size[1]
+        else:
+            if isinstance(this_steps, (list, tuple)) and len(this_steps) == 2:
+                step_height = this_steps[0]
+                step_width = this_steps[1]
+            elif isinstance(this_steps, (int, float)):
+                step_height = this_steps
+                step_width = this_steps
+
+        # Compute the offsets, i.e. at what pixel values the first anchor box center point will be
+        # from the top and from the left of the image.
+        if this_offsets is None:
+            offset_height = 0.5
+            offset_width = 0.5
+        else:
+            if isinstance(this_offsets, (list, tuple)) and len(this_offsets) == 2:
+                offset_height = this_offsets[0]
+                offset_width = this_offsets[1]
+            elif isinstance(this_offsets, (int, float)):
+                offset_height = this_offsets
+                offset_width = this_offsets
+
+        # Now we have the offsets and step sizes, compute the grid of anchor box center points.
+        cy = np.linspace(offset_height * step_height,
+                         (offset_height + feature_map_size[0] - 1) * step_height,
+                         feature_map_size[0])
+        cx = np.linspace(offset_width * step_width,
+                         (offset_width + feature_map_size[1] - 1) * step_width,
+                         feature_map_size[1])
+        cx_grid, cy_grid = np.meshgrid(cx, cy)
+        # This is necessary for np.tile() to do what we want future down.
+        cx_grid = np.expand_dims(cx_grid, -1)
+        cy_grid = np.expand_dims(cy_grid, -1)
+
+        # Create a 4D tensor template of shape `(feature_map_height, feature_map_width, n_boxes, 4)`
+        # where the last dimension will contain `(cx, cy, w, h)`.
+        boxes_tensor = np.zeros((feature_map_size[0], feature_map_size[1], n_boxes, 4))
+        boxes_tensor[:, :, :, 0] = np.tile(cx_grid, (1, 1, n_boxes))  # Set cx
+        boxes_tensor[:, :, :, 1] = np.tile(cy_grid, (1, 1, n_boxes))  # Set cy
+        boxes_tensor[:, :, :, 2] = wh_list[:, 0]  # Set w
+        boxes_tensor[:, :, :, 3] = wh_list[:, 1]  # Set h
+
+        # Convert `(cx, cy, w, h)` to `(xmin, ymin, xmax, ymax)`.
+        boxes_tensor = convert_coordinates(boxes_tensor, start_index=0, conversion='centroids2corners')
+
+        # If `clip_boxes` is enabled, clip the coordinates to lie within the image boundaries.
+        if self.clip_boxes:
+            x_coords = boxes_tensor[:, :, :, [0, 2]]
+            x_coords[x_coords >= self.img_width] = self.img_width - 1
+            x_coords[x_coords < 0] = 0
+            boxes_tensor[:, :, :, [0, 2]] = x_coords
+            y_coords = boxes_tensor[:, :, :, [1, 3]]
+            y_coords[y_coords >= self.img_height] = self.img_height - 1
+            y_coords[y_coords < 0] = 0
+            boxes_tensor[:, :, :, [1, 3]] = y_coords
+
+        # `normalize_coords` is enabled, normalize the coordinates to be within [0, 1].
+        if self.normalize_coords:
+            boxes_tensor[:, :, :, [0, 2]] /= self.img_width
+            boxes_tensor[:, :, :, [1, 3]] /= self.img_height
+
+        # todo directly limit for (cx, cy, w, h)
+        if self.coords == 'centroids':
+            boxes_tensor = convert_coordinates(boxes_tensor, start_index=0, conversion='corners2centroids',
+                                               border_pixels='half')
+        elif self.coords == 'minmax':
+            boxes_tensor = convert_coordinates(boxes_tensor, start_index=0, conversion='corners2minmax',
+                                               border_pixels=self.border_pixels)
+
+        if diagnostics:
+            return boxes_tensor, (cy, cx), wh_list, (step_height, step_width), (offset_height, offset_width)
+        else:
+            return boxes_tensor
+
+    def generate_encoding_template(self, batch_size, diagnostics=False):
+        """
+        Product an encoding template for the ground truth label tensor for a given batch.
+
+        Note that all tensor creation, reshaping and concatenation operations performed in this function
+        and the sub-functions it calls are identical to those performed inside the SSD model.
+
+        In other words, the boxes in `y_encoded` must have a specific order in order correspond to the right spatial
+        positions and scales of the boxes predicted by the model. The sequence of operations here ensures that
+        `y_encoded` has this specific form.
+
+        Returns:
+            A NumPy array of shape `(batch_size, #boxes, #classes + 12)`, the template into which to encode
+            the background truth labels for training. The last axis has length `#classes + 12` because the
+            model output contains not only the 4 predicted box coordinate offsets, but also the 4 coordinates
+            for the anchor and the 4 variance values.
+        """
+        # Tile the anchor boxes for each predictor layer across all batch items.
+        boxes_batch = []
+        for boxes in self.boxes_list:
+            # Prepend one dimension to `self.boxes_list` to account for the batch size and tile it along.
+            # The result will be a 5D tensor of shape `(batch_size, feature_map_height, feature_map_width, n_boxes, 4)`
+            boxes = np.expand_dims(boxes, axis=0)
+            boxes = np.tile(boxes, (batch_size, 1, 1, 1, 1))
+
+            # Reshape the 5D tensor above into a 3D tensor of shape
+            # `(batch, feature_map_height * feature_map_width * n_boxes, 4)`. The resulting order of the
+            # tensor content will be identical to the order obtained from the reshaping operation in our
+            # Keras model (we are using the TensorFlow backend, and tf.reshape() and np.reshape() use the
+            # same default index order.)
+            boxes = np.reshape(boxes, (batch_size, -1, 4))
+            boxes_batch.append(boxes)
+
+        # Concatenate the anchor tensors from the individual layers to one.
+        boxes_tensor = np.concatenate(boxes_batch, axis=1)
+
+        # Create a template tensor to hold the one-hot class encoding of shape `(batch, #boxes, #classes)`.
+        # It will contain all zeros for now, the classes will be set in the matching process that follows.
+        classes_tensor = np.zeros((batch_size, boxes_tensor.shape[1], self.n_classes))
+
+        # Create a tensor to contain the variances. This tensor has the same shape as `boxes_tensor` and
+        # simply contains the same 4 variance value for every position in the last axis.
+        variances_tensor = np.zeros_like(boxes_tensor)
+        variances_tensor += self.variances
+
+        # Concatenate the classes, boxes and variances tensors to get the final template for y_encoded.
+        # We also need anchor tensor of the shape `boxes_tensor` as a space filter so that
+        # `y_encoded_template` has the same shape as the SSD model output tensor. The content of this
+        # tensor is irrelevant, we'll just use `boxes_tensor` a second time.
+        y_encoded_template = np.concatenate((classes_tensor, boxes_tensor, boxes_tensor, variances_tensor), axis=2)
+
+        if diagnostics:
+            return y_encoded_template, self.centers_diag, self.wh_list_diag, self.steps_diag, self.offsets_diag
+        else:
+            return y_encoded_template
+
+
+class DegenerateBoxError(Exception):
+    """
+    An exception class to be raised if degenerate boxes are being detected.
+    """
+    pass

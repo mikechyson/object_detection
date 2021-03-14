@@ -124,8 +124,8 @@ class AnchorBoxes(Layer):
                     box_height = box_width = np.sqrt(self.this_scale * self.next_scale) * size
                     wh_list.append((box_width, box_height))
             else:
-                box_height = self.this_scale * size * np.sqrt(ar)  #
-                box_width = self.this_scale * size * np.sqrt(ar)  #
+                box_height = self.this_scale * size * np.sqrt(ar)
+                box_width = self.this_scale * size / np.sqrt(ar)
                 wh_list.append((box_width, box_height))
         wh_list = np.array(wh_list)
 
