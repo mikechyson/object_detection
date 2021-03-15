@@ -1,12 +1,3 @@
-#!/usr/bin/env python3
-"""
-@project: object_detection
-@file: create_hdf5
-@author: mike
-@time: 2021/3/14
- 
-@function:
-"""
 from generator.data_generator import DataGenerator
 
 # 1: Instantiate two `DataGenerator` objects: One for training, one for validation.
@@ -23,8 +14,8 @@ val_dataset = DataGenerator()
 images_dir = '/Users/mike/Downloads/udacity_driving_datasets'
 
 # Ground truth
-train_labels_filename = '/Users/mike/Downloads/udacity_driving_datasets/labels_train_mini.csv'
-val_labels_filename = '/Users/mike/Downloads/udacity_driving_datasets/labels_val_mini.csv'
+train_labels_filename = '/Users/mike/Downloads/udacity_driving_datasets/labels_train.csv'
+val_labels_filename = '/Users/mike/Downloads/udacity_driving_datasets/labels_val.csv'
 
 train_dataset.parse_csv(images_dir=images_dir,
                         labels_filename=train_labels_filename,

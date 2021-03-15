@@ -1,11 +1,3 @@
-#!/usr/bin/env python3
-"""
-@project: object_detection
-@file: constant_input_size_chain
-@time: 2021/3/9
- 
-@function:
-"""
 from __future__ import division
 import numpy as np
 from utils.boxes_validation import BoxFilter, ImageValidator
@@ -66,28 +58,3 @@ class DataAugmentationConstantInputSize:
                                               labels_format=self.labels_format)
 
         # Utility distortions.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

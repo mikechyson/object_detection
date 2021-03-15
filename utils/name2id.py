@@ -1,12 +1,3 @@
-#!/usr/bin/env python3
-"""
-@project: object_detection
-@file: name2id
-@author: mike
-@time: 2021/3/10
- 
-@function:
-"""
 import csv
 import pickle
 

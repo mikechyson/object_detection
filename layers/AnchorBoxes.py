@@ -1,11 +1,3 @@
-#!/usr/bin/env python3
-"""
-@project: object_detection
-@file: AnchorBoxes
-@time: 2021/3/4
- 
-@function:
-"""
 from __future__ import division
 
 import numpy as np

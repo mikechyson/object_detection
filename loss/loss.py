@@ -1,11 +1,3 @@
-#!/usr/bin/env python3
-"""
-@project: object_detection
-@file: loss
-@time: 2021/3/8
- 
-@function:
-"""
 from __future__ import division
 import tensorflow as tf
 

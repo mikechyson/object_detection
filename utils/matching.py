@@ -1,12 +1,3 @@
-#!/usr/bin/env python3
-"""
-@project: object_detection
-@file: matching
-@author: mike
-@time: 2021/3/12
- 
-@function:
-"""
 from __future__ import division
 import numpy as np
 

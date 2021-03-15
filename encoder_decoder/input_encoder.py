@@ -1,12 +1,3 @@
-#!/usr/bin/env python3
-"""
-@project: object_detection
-@file: input_encoder
-@author: mike
-@time: 2021/3/10
- 
-@function:
-"""
 from __future__ import division
 import numpy as np
 from utils.bounding_box import convert_coordinates
@@ -152,7 +143,7 @@ class SSDInputEncoder:
         # # If no list of scales was passed, we need to make sure that `min_scale` and `max_scale` are valid values.
         else:
             if not 0 < min_scale <= max_scale:
-                raise ValueError(f"It must be 0 < min_scale <= max_scale, but it is min_scale = {min()} and "
+                raise ValueError(f"It must be 0 < min_scale <= max_scale, but it is min_scale = {min_scale} and "
                                  f"max_scale = {max_scale}.")
 
         if aspect_ratios_per_layer is not None:
@@ -206,10 +197,10 @@ class SSDInputEncoder:
         self.background_id = background_id
         # If `scales` is None, compute the scaling factors by linearly interpolating between
         # `min_scale` and `max_scale`.
-        if scales is None:
-            self.scales = np.linspace(self.min_scale, self.max_scale, len(self.predictor_sizes) + 1)
-        else:
+        if scales is not None:
             self.scales = scales
+        else:
+            self.scales = np.linspace(self.min_scale, self.max_scale, len(self.predictor_sizes) + 1)
         # If `aspect_ratios_per_layer` is None, then we use the same list of aspect ratios
         # `aspect_ratios_global` for all predictor layers.
         if aspect_ratios_per_layer is None:

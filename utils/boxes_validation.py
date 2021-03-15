@@ -1,12 +1,3 @@
-#!/usr/bin/env python3
-"""
-@project: object_detection
-@file: boxes_validation_utils
-@author: mike
-@time: 2021/3/10
- 
-@function:
-"""
 import numpy as np
 from utils.bounding_box import iou
 

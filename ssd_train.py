@@ -1,13 +1,5 @@
-#!/usr/bin/env python3
-"""
-@project: object_detection
-@file: ssd_train
-@time: 2021/3/4
- 
-@function:
-"""
 import keras.backend as K
-from models.SSD7 import SSD7
+from models.ssd7 import build_ssd7
 from keras.optimizers import Adam
 from loss.loss import SSDLoss
 from generator.data_generator import DataGenerator
@@ -44,21 +36,21 @@ batch_size = 16
 ########################################################################################################################
 # Create the model
 K.clear_session()  # Clear previous models from memory.
-model = SSD7(image_size=(img_height, img_width, img_channels),
-             n_classes=n_classes,
-             mode='training',
-             l2_regularization=0.0005,
-             scales=scales,
-             aspect_ratios_global=aspect_ratios,
-             aspect_ratios_per_layer=None,
-             two_boxes_for_ar1=two_boxes_for_ar1,
-             steps=steps,
-             offsets=offsets,
-             clip_boxes=clip_boxes,
-             variances=variances,
-             normalize_coords=normalize_coords,
-             subtract_mean=intensity_mean,
-             divide_by_stddev=intensity_range)
+model = build_ssd7(image_size=(img_height, img_width, img_channels),
+                   n_classes=n_classes,
+                   mode='training',
+                   l2_regularization=0.0005,
+                   scales=scales,
+                   aspect_ratios_global=aspect_ratios,
+                   aspect_ratios_per_layer=None,
+                   two_boxes_for_ar1=two_boxes_for_ar1,
+                   steps=steps,
+                   offsets=offsets,
+                   clip_boxes=clip_boxes,
+                   variances=variances,
+                   normalize_coords=normalize_coords,
+                   subtract_mean=intensity_mean,
+                   divide_by_stddev=intensity_range)
 print(model.summary())
 
 ########################################################################################################################
@@ -108,22 +100,20 @@ predictor_sizes = [
 ]
 print(f'predictor_sizes={predictor_sizes}')
 
-ssd_input_encoder = SSDInputEncoder(
-    img_height=img_height,
-    img_width=img_width,
-    n_classes=n_classes,
-    predictor_sizes=predictor_sizes,
-    aspect_ratios_global=aspect_ratios,
-    two_boxes_for_ar1=two_boxes_for_ar1,
-    steps=steps,
-    offsets=offsets,
-    clip_boxes=clip_boxes,
-    variances=variances,
-    matching_type='multi',
-    pos_iou_threshold=0.5,
-    neg_iou_limit=0.3,
-    normalize_coords=normalize_coords
-)
+ssd_input_encoder = SSDInputEncoder(img_height=img_height,
+                                    img_width=img_width,
+                                    n_classes=n_classes,
+                                    predictor_sizes=predictor_sizes,
+                                    aspect_ratios_global=aspect_ratios,
+                                    two_boxes_for_ar1=two_boxes_for_ar1,
+                                    steps=steps,
+                                    offsets=offsets,
+                                    clip_boxes=clip_boxes,
+                                    variances=variances,
+                                    matching_type='multi',
+                                    pos_iou_threshold=0.5,
+                                    neg_iou_limit=0.3,
+                                    normalize_coords=normalize_coords)
 
 ########################################################################################################################
 # Create the generator handles that will be passed to Keras' `fit_generator()` function.
@@ -169,19 +159,17 @@ callbacks = [model_checkpoint, csv_logger, early_stopping, reduce_learning_rate]
 ########################################################################################################################
 # Set the epochs and train.
 initial_epoch = 0
-final_epoch = 10
+final_epoch = 1000
 steps_per_epoch = math.ceil(trail_dataset_size / batch_size)
 
-history = model.fit_generator(
-    generator=train_generator,
-    steps_per_epoch=steps_per_epoch,
-    epochs=final_epoch,
-    callbacks=callbacks,
-    validation_data=val_generator,
-    validation_steps=math.ceil(val_dataset_size / batch_size),
-    initial_epoch=initial_epoch,
-    verbose=1
-)
+history = model.fit_generator(generator=train_generator,
+                              steps_per_epoch=steps_per_epoch,
+                              epochs=final_epoch,
+                              callbacks=callbacks,
+                              validation_data=val_generator,
+                              validation_steps=math.ceil(val_dataset_size / batch_size),
+                              initial_epoch=initial_epoch,
+                              verbose=1)
 
 ########################################################################################################################
 # Plot the training process.

@@ -1,11 +1,3 @@
-#!/usr/bin/env python3
-"""
-@project: object_detection
-@file: data_generator
-@time: 2021/3/9
- 
-@function:
-"""
 import pickle
 import os
 import numpy as np

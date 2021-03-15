@@ -1,11 +1,3 @@
-#!/usr/bin/env python3
-"""
-@project: object_detection
-@file: bounding_box
-@time: 2021/3/4
- 
-@function:
-"""
 from __future__ import division
 import numpy as np
 
@@ -67,7 +59,6 @@ def convert_coordinates(tensor, start_index, conversion, border_pixels='half'):
                          '"corners2centroids", "centroids2corners", "minmax2corners", '
                          '"corners2minmax".')
     return tensor_copy
-
 
 
 def get_intersection_area(boxes1, boxes2, coords='corners', mode='outer_product', border_pixels='half'):
@@ -159,29 +150,34 @@ def iou(boxes1, boxes2, coords='centroids', mode='outer_product', border_pixels=
     '''
 
     # Make sure the boxes have the right shapes.
-    if boxes1.ndim > 2: raise ValueError("boxes1 must have rank either 1 or 2, but has rank {}.".format(boxes1.ndim))
-    if boxes2.ndim > 2: raise ValueError("boxes2 must have rank either 1 or 2, but has rank {}.".format(boxes2.ndim))
+    if boxes1.ndim > 2:
+        raise ValueError(f"boxes1 must have rank either 1 or 2, but has rank {boxes1.ndim}.")
+    if boxes2.ndim > 2:
+        raise ValueError(f"boxes2 must have rank either 1 or 2, but has rank {boxes2.ndim}.")
 
-    if boxes1.ndim == 1: boxes1 = np.expand_dims(boxes1, axis=0)
-    if boxes2.ndim == 1: boxes2 = np.expand_dims(boxes2, axis=0)
+    if boxes1.ndim == 1:
+        boxes1 = np.expand_dims(boxes1, axis=0)
+    if boxes2.ndim == 1:
+        boxes2 = np.expand_dims(boxes2, axis=0)
 
-    if not (boxes1.shape[1] == boxes2.shape[1] == 4): raise ValueError(
-        "All boxes must consist of 4 coordinates, but the boxes in `boxes1` and `boxes2` have {} and {} coordinates, respectively.".format(
-            boxes1.shape[1], boxes2.shape[1]))
-    if not mode in {'outer_product', 'element_wise'}: raise ValueError(
-        "`mode` must be one of 'outer_product' and 'element-wise', but got '{}'.".format(mode))
+    if not (boxes1.shape[1] == boxes2.shape[1] == 4):
+        raise ValueError("All boxes must consist of 4 coordinates, "
+                         f"but the boxes in `boxes1` and `boxes2` have {boxes1.shape[1]} "
+                         f"and {boxes2.shape[1]} coordinates, respectively.")
+    if mode not in {'outer_product', 'element_wise'}:
+        raise ValueError(f"`mode` must be one of 'outer_product' and 'element-wise', but got '{mode}'.")
 
     # Convert the coordinates if necessary.
     if coords == 'centroids':
         boxes1 = convert_coordinates(boxes1, start_index=0, conversion='centroids2corners')
         boxes2 = convert_coordinates(boxes2, start_index=0, conversion='centroids2corners')
         coords = 'corners'
-    elif not (coords in {'minmax', 'corners'}):
+    elif coords not in {'minmax', 'corners'}:
         raise ValueError("Unexpected value for `coords`. Supported values are 'minmax', 'corners' and 'centroids'.")
 
     # Compute the IoU.
 
-    # Compute the interesection areas.
+    # Compute the intersection areas.
 
     intersection_areas = get_intersection_area(boxes1, boxes2, coords=coords, mode=mode)
 
@@ -205,21 +201,18 @@ def iou(boxes1, boxes2, coords='centroids', mode='outer_product', border_pixels=
     if border_pixels == 'half':
         d = 0
     elif border_pixels == 'include':
-        d = 1  # If border pixels are supposed to belong to the bounding boxes, we have to add one pixel to any difference `xmax - xmin` or `ymax - ymin`.
+        d = 1
     elif border_pixels == 'exclude':
-        d = -1  # If border pixels are not supposed to belong to the bounding boxes, we have to subtract one pixel from any difference `xmax - xmin` or `ymax - ymin`.
+        d = -1
 
     if mode == 'outer_product':
-
         boxes1_areas = np.tile(
             np.expand_dims((boxes1[:, xmax] - boxes1[:, xmin] + d) * (boxes1[:, ymax] - boxes1[:, ymin] + d), axis=1),
             reps=(1, n))
         boxes2_areas = np.tile(
             np.expand_dims((boxes2[:, xmax] - boxes2[:, xmin] + d) * (boxes2[:, ymax] - boxes2[:, ymin] + d), axis=0),
             reps=(m, 1))
-
     elif mode == 'element_wise':
-
         boxes1_areas = (boxes1[:, xmax] - boxes1[:, xmin] + d) * (boxes1[:, ymax] - boxes1[:, ymin] + d)
         boxes2_areas = (boxes2[:, xmax] - boxes2[:, xmin] + d) * (boxes2[:, ymax] - boxes2[:, ymin] + d)
 
