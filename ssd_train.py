@@ -72,23 +72,6 @@ val_dataset_size = val_dataset.get_dataset_size()
 print(f'Number of images in the training dataset  : \t{trail_dataset_size:>6}')
 print(f'Number of images in the validation dataset: \t{val_dataset_size:>6}')
 
-# ########################################################################################################################
-# # 5) Define the image processing and augmentation chain.
-# # data_augmentation_chain = DataAugmentationConstantInputSize(random_brightness=(-48, 48, 0.5),
-# #                                                             random_contrast=(0.5, 1.8, 0.5),
-# #                                                             random_saturation=(0.5, 1.8, 0.5),
-# #                                                             random_hue=(18, 0.5),
-# #                                                             random_flip=0.5,
-# #                                                             random_translate=((0.03, 0.5), (0.03, 0.5), 0.5),
-# #                                                             random_scale=(0.5, 2.0, 0.5),
-# #                                                             n_trials_max=3,
-# #                                                             clip_boxes=True,
-# #                                                             overlap_criterion='area',
-# #                                                             bounds_box_filter=(0.3, 1.0),
-# #                                                             bounds_validator=(0.5, 1.0),
-# #                                                             n_boxes_min=1,
-# #                                                             background=(0, 0, 0))  # todo
-#
 ########################################################################################################################
 # Instantiate an encoder that can encode ground truth labels into the format needed by the SSD loss function.
 # The encoder constructor needs the spatial dimensions of the model predictor layers to create the anchor boxes.
